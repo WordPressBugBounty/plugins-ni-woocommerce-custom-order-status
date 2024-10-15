@@ -1,14 +1,14 @@
 ﻿===  Ni WooCommerce Custom Order Status ===
 Contributors: anzia
 Tags: woocommerce custom status, order status, order status report,order statuses, status, report
-Stable tag: 2.2.5
+Stable tag: 2.2.6
 License: GPLv3 or later
 License URI: http://www.gnu.org/licenses/agpl-3.0.html
 Requires at least: 4.7
-Tested up to: 6.6.1
+Tested up to: 6.6.2
 WC requires at least: 3.0.0
-WC tested up to: 9.1.4
-Last Updated Date:20-August-2024
+WC tested up to: 9.3.3
+Last Updated Date:15-October-2024
 Requires PHP: 7.0
 
 
@@ -94,6 +94,10 @@ Yes, as per requirement we can customize this plugin.
 
 
 == Changelog ==
+
+= version 2.2.6 -15-October-2024 =
+* Tested: Compatible With WooCommerce 9.3.3
+* Tested: Compatible With WordPress 6.6.2
 
 = version 2.2.5 -20-August-2024 =
 * Tested: Compatible With WooCommerce 9.1.4
