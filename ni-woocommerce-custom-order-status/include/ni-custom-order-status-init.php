@@ -393,27 +393,32 @@ if( !class_exists( 'ni_custom_order_status_init' ) ) {
 					print("<div style=\"height:25px; width:25px; background-color:". $ni_order_status_color."\"></div>");
 			 }
 		}
-		function ni_next_order_actions($actions , $the_order ){				
-			global $post;
-			
-			$custom_order_status_string = "";
-			$custom_order_status  = $this->get_custom_post_type_order_status();
-			
+		
+		function ni_next_order_actions($actions, $the_order){				
+    
+			$custom_order_status = $this->get_custom_post_type_order_status();
 			$custom_array = array(); 
-			foreach($custom_order_status  as $k =>$v){			
-				$custom_array[] =  $v["ni_order_status_slug"];
+
+			foreach($custom_order_status as $k => $v){			
+				$custom_array[] = $v["ni_order_status_slug"];
 			}
-			
-			if ( $the_order->has_status( $custom_array) ) {
+
+			if ($the_order->has_status($custom_array)) {
+
+				$order_id = $the_order->get_id();
+
 				$actions['complete'] = array(
-					'url'       => wp_nonce_url( admin_url( 'admin-ajax.php?action=woocommerce_mark_order_status&status=completed&order_id=' . $post->ID ), 'woocommerce-mark-order-status' ),
-					'name'      => __( 'Complete', 'niwoocos' ),
-					'action'    => "complete"
+					'url' => wp_nonce_url(
+						admin_url('admin-ajax.php?action=woocommerce_mark_order_status&status=completed&order_id=' . $order_id),
+						'woocommerce-mark-order-status'
+					),
+					'name' => __('Complete', 'niwoocos'),
+					'action' => "complete"
 				);
 			}
-			return $actions ;
+
+			return $actions;
 		}
-		
 	}
 }
 ?>

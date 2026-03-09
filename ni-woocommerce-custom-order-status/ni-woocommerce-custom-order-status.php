@@ -1,21 +1,25 @@
-<?php 
+<?php
 /*
 Plugin Name: Ni WooCommerce Custom Order Status
-Description: WooCommerce Custom Order Status plug-in allows you to create and manage new order statuses for WooCommerce and also show the order status report 	
-Version:  2.2.6
-Author:anzia
-Author URI: http://naziinfotech.com/
+Description: WooCommerce Custom Order Status plugin allows you to create and manage new order statuses for WooCommerce and also display order status reports.
+Version: 2.2.7
+Author: Anzia
+Author URI: https://naziinfotech.com/
 Plugin URI: https://wordpress.org/plugins/ni-woocommerce-custom-order-status/
 License: GPLv3 or later
-License URI: http://www.gnu.org/licenses/agpl-3.0.html
-Requires at least: 4.7
-Tested up to: 6.6.2
-WC requires at least: 3.0.0
-WC tested up to: 9.3.3
-Last Updated Date:15-October-2024
-Requires PHP: 7.0
+License URI: https://www.gnu.org/licenses/gpl-3.0.html
+
+Requires at least: 5.0
+Tested up to: 6.9.1
+Requires PHP: 7.4
+
+Requires Plugins: woocommerce
+
+WC requires at least: 4.0
+WC tested up to: 9.7
+
 Text Domain: niwoocos
-Domain Path: languages/
+Domain Path: /languages/
 */
 if ( ! defined( 'ABSPATH' ) ) { exit;}
 if( !class_exists( 'ni_custom_order_status' ) ) {
@@ -38,7 +42,15 @@ if( !class_exists( 'ni_custom_order_status' ) ) {
 		}
 		function plugins_loaded(){
 			
-			 //$this->set_hpos_enabled();
+			 if ( ! class_exists( 'WooCommerce' ) ) {
+
+			        deactivate_plugins( plugin_basename( __FILE__ ) );
+
+				add_action( 'admin_notices', function() {
+					echo '<div class="error"><p><strong>Ni Cost of Goods for WooCommerce</strong> requires WooCommerce to be installed and active.</p></div>';
+				});
+
+			}
 			
 			include_once('include/ni-custom-order-status-init.php'); 
 			$obj = new ni_custom_order_status_init();  

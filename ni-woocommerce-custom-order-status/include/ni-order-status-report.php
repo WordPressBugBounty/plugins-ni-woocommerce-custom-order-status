@@ -189,7 +189,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 
 		$initial_date = date('Y-m-d');
 		$final_date = date('Y-m-d');
-		$selected_order_days = sanitize_text_field(isset($_REQUEST["order_days"])?$_REQUEST["order_days"]:'today');
+     	$selected_order_days = sanitize_text_field(isset($_REQUEST["order_days"])?$_REQUEST["order_days"]:'today');
 		$order_status = sanitize_text_field(isset($_REQUEST["order_status"])?$_REQUEST["order_status"]:'-1');
 		
 	    $order_by = sanitize_text_field(isset($_REQUEST["order_by"])?$_REQUEST["order_by"]:'total');
@@ -233,9 +233,13 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 			  break;
 		  }
 		  
+		$start_timestamp = strtotime($initial_date);
+		$end_timestamp   = strtotime($final_date . ' +1 day');
+
 		$order_query_args = array(
-			'date_created' => $initial_date . '...' . $final_date,
-		  );
+			'limit'        => -1,
+			'date_created' => $start_timestamp . '...' . $end_timestamp,
+		);
 		  
 		if ($order_status !== '-1') {
 			$order_query_args['status'] = array($order_status);
@@ -270,15 +274,6 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 		
 		//$this->print_array($order_data );
 		$order_data = $this->sort_array($order_data, $order_by, $sort);
-
-		
-		// foreach ($order_data as $data) {
-		// 	echo 'Status: ' . $data['order_status'] . ', Total: ' . $data['order_total'] . ', Count: ' . $data['order_count'] . '<br>';
-		// }
-
-		
-
-
 			return $order_data;			
 		}
 		
