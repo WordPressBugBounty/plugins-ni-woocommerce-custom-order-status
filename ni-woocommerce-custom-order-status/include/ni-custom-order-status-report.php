@@ -11,8 +11,28 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 		
 		function get_yearly_sales(){
 			global $wpdb;
+
+			if ( $this->set_hpos_enabled() ) {
+				/*
+				 * HPOS: orders are authoritative in the wp_wc_orders custom table.
+				 * Raw SQL is retained (same yearly aggregation strategy as the legacy
+				 * branch below); only the storage location changes.
+				 */
+				$hpos_query = "
+					SELECT
+					SUM(orders.total_amount) as 'order_total'
+					,YEAR(orders.date_created_gmt) as Year
+					FROM {$wpdb->prefix}wc_orders as orders
+					WHERE orders.type = 'shop_order'
+					AND orders.status NOT IN ('trash')
+					AND orders.status IN ('wc-processing','wc-on-hold', 'wc-completed')
+					GROUP BY YEAR(orders.date_created_gmt) ";
+
+				return $wpdb->get_results( $hpos_query );
+			}
+
 			$query = "
-				SELECT 
+				SELECT
 				SUM(postmeta.meta_value) as 'order_total'
 				,YEAR(date_format( posts.post_date, '%Y-%m-%d')) as Year
 			FROM {$wpdb->prefix}posts as posts	";		
@@ -915,6 +935,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 					break;	
 			}
 
+			$args["limit"] = -1; // aggregate every matching order, not just the first 10
 			$orders = wc_get_orders($args);
 
 
@@ -961,9 +982,13 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 					break;							
 				default:
 					$args["date_created"] =  $start_date . '...' . $end_date;
-					break;	
+					break;
 			}
-			
+
+			// These report helpers iterate the full result set to build counts/totals,
+			// so disable wc_get_orders()'s default limit of 10 (which would undercount).
+			$args["limit"] = -1;
+
 			return $args;
 
 		}
@@ -1067,10 +1092,11 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 					break;	
 			}
 
+			$args["limit"] = -1; // count every matching order, not just the first 10
 			$orders = wc_get_orders($args);
 
 
-		
+
 			$total_order_count = count($orders);
 
 			return	$total_order_count ;
@@ -1216,92 +1242,94 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 			return $order_data;
 		}
 		function get_order_status($period){
-			
+
 			// Get all order statuses
-				$order_statuses = wc_get_order_statuses();
+			$order_statuses = wc_get_order_statuses();
 
-				
-				$args  = $this->get_date_filter($period);
+			$args  = $this->get_date_filter($period);
 
+			// Fetch every order for the period in one query and bucket by status in PHP.
+			// (Previously this issued a separate wc_get_orders() call for each registered
+			// status, which loaded the order set once per status.)
+			$args["status"] = array_keys( $order_statuses );
+			$orders = wc_get_orders( $args );
 
-				$status_data = array();
+			$status_data = array();
 
-				// Loop through each order status
-				foreach ($order_statuses as $status_key => $status_label) {
-					// Get orders for the current status
-					
-					// $orders = wc_get_orders(array(
-					// 	'status' => $status_key,
-					// ));
+			foreach ( $orders as $order ) {
+				$status_key = 'wc-' . $order->get_status();
 
-
-					$args  ["status"] = $status_key;
-					$orders = wc_get_orders($args);
-
-					// Calculate count and total for the current status
-					$order_count = count($orders);
-					$order_total = 0;
-
-					foreach ($orders as $order) {
-						$order_total += $order->get_total();
-					}
-
-					// Store the data for the current status in the array
-
-					if ( $order_count > 0)
-					$status_data[$status_key] = array(
-						'order_count' => $order_count,
-						'order_total' => $order_total,
+				if ( ! isset( $status_data[ $status_key ] ) ) {
+					$status_data[ $status_key ] = array(
+						'order_count'  => 0,
+						'order_total'  => 0,
 						'order_status' => $status_key,
 					);
 				}
 
-			return $status_data;
-		}
-		function get_payment_gateway($period){
-			
-			// Get all order statuses
-			$payment_gateways = WC()->payment_gateways->payment_gateways();
-	
-			$args  = $this->get_date_filter($period);
-
-
-			// Initialize an array to store counts and totals for each gateway
-			$gateway_data = array();
-			// Loop through each order status
-			foreach ($payment_gateways as $gateway_id => $gateway) {
-				// Get orders for the current status
-				
-				// $orders = wc_get_orders(array(
-				// 	'status' => $status_key,
-				// ));
-
-				//$this->print_array($gateway->method_title);
-
-				$args  ["payment_method"] = $gateway_id;
-				$orders = wc_get_orders($args);
-
-				// Calculate count and total for the current status
-				$order_count = count($orders);
-				$order_total = 0;
-
-				foreach ($orders as $order) {
-					$order_total += $order->get_total();
-				}
-
-				// Store the data for the current status in the array
-
-				if ( $order_count > 0)
-				$gateway_data[$gateway_id] = array(
-					'order_count' => $order_count,
-					'order_total' => $order_total,
-					'payment_method_title' => $gateway->method_title,
-				);
+				$status_data[ $status_key ]['order_count'] += 1;
+				$status_data[ $status_key ]['order_total'] += $order->get_total();
 			}
 
-		return $gateway_data;
+			// Preserve the previous output ordering (wc_get_order_statuses() order,
+			// only statuses that actually have orders).
+			$ordered = array();
+			foreach ( array_keys( $order_statuses ) as $status_key ) {
+				if ( isset( $status_data[ $status_key ] ) ) {
+					$ordered[ $status_key ] = $status_data[ $status_key ];
+				}
+			}
+			foreach ( $status_data as $status_key => $row ) {
+				if ( ! isset( $ordered[ $status_key ] ) ) {
+					$ordered[ $status_key ] = $row;
+				}
+			}
 
+			return $ordered;
+		}
+		function get_payment_gateway($period){
 
+			$payment_gateways = WC()->payment_gateways->payment_gateways();
+
+			$args  = $this->get_date_filter($period);
+
+			// Fetch every order for the period in one query and bucket by payment
+			// method in PHP. (Previously this issued a separate wc_get_orders() call
+			// for each registered gateway.)
+			$orders = wc_get_orders( $args );
+
+			$gateway_data = array();
+
+			foreach ( $orders as $order ) {
+				$gateway_id = $order->get_payment_method();
+
+				// Only report methods that map to a currently-registered gateway,
+				// matching the previous behaviour.
+				if ( '' === $gateway_id || ! isset( $payment_gateways[ $gateway_id ] ) ) {
+					continue;
+				}
+
+				if ( ! isset( $gateway_data[ $gateway_id ] ) ) {
+					$gateway_data[ $gateway_id ] = array(
+						'order_count'          => 0,
+						'order_total'          => 0,
+						'payment_method_title' => $payment_gateways[ $gateway_id ]->method_title,
+					);
+				}
+
+				$gateway_data[ $gateway_id ]['order_count'] += 1;
+				$gateway_data[ $gateway_id ]['order_total'] += $order->get_total();
+			}
+
+			// Preserve the previous output ordering (registered-gateway order).
+			$ordered = array();
+			foreach ( array_keys( $payment_gateways ) as $gateway_id ) {
+				if ( isset( $gateway_data[ $gateway_id ] ) ) {
+					$ordered[ $gateway_id ] = $gateway_data[ $gateway_id ];
+				}
+			}
+
+			return $ordered;
 		}
 		function get_payment_gateway_deprecated(){
 			global $wpdb;	
@@ -1614,8 +1642,9 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 			AND posts.post_status = 'publish'
 			AND postmeta2.meta_key = '_manage_stock' AND postmeta2.meta_value = 'yes'";
 			
-			$query .=  ' AND postmeta.meta_key = \'_stock\' AND CAST(postmeta.meta_value AS SIGNED) <= %1$d';
-			$query .=  ' AND postmeta.meta_key = \'_stock\' AND CAST(postmeta.meta_value AS SIGNED) > %2$d';
+			$query .=  ' AND postmeta.meta_key = \'_stock\'';
+			$query .=  ' AND CAST(postmeta.meta_value AS SIGNED) <= %1$d';
+			$query .=  ' AND CAST(postmeta.meta_value AS SIGNED) > %2$d';
 			
 			$row = $wpdb->get_var($wpdb->prepare($query,$stock,$nostock));
 			
@@ -1685,6 +1714,31 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 			global $wpdb;
 			$row = array();
 			$query = "";
+
+			if ( $this->set_hpos_enabled() ) {
+				/*
+				 * HPOS: order totals live on wp_wc_orders and the billing name/email on
+				 * wp_wc_order_addresses. Raw SQL is retained with the same "top 5 customers
+				 * by total spend" semantics as the legacy branch below.
+				 */
+				$hpos_query = "SELECT
+						SUM(orders.total_amount) as 'order_total'
+						,COUNT(*) as 'order_count'
+						,billing_address.first_name as billing_first_name
+						,billing_address.email as billing_email
+						FROM {$wpdb->prefix}wc_orders as orders
+						LEFT JOIN {$wpdb->prefix}wc_order_addresses as billing_address
+							ON billing_address.order_id = orders.id
+							AND billing_address.address_type = 'billing'
+						WHERE orders.type = 'shop_order'
+						AND orders.status NOT IN ('trash')
+						GROUP BY billing_address.email
+						ORDER BY SUM(orders.total_amount) DESC
+						LIMIT 5
+						";
+				return $wpdb->get_results( $hpos_query );
+			}
+
 			$query = "SELECT
 					SUM(order_total.meta_value)as 'order_total'
 					,COUNT(*)as 'order_count'
@@ -1714,15 +1768,9 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 		}
 		function get_country_report(){
 
-			$query = new WC_Order_Query(array() );
-			$orders = $query->get_orders();
-			//echo count($orders );
-			//$this->print_array($orders );
-
-			
-
-			// Get all orders
-			$all_orders = wc_get_orders(array());
+			// Get all orders (limit => -1; wc_get_orders() otherwise defaults to 10,
+			// which would silently truncate the country totals).
+			$all_orders = wc_get_orders( array( 'limit' => -1 ) );
 
 			// Initialize an array to store order counts and totals for each country
 			$country_data = array();

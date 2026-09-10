@@ -2,7 +2,7 @@
 /*
 Plugin Name: Ni WooCommerce Custom Order Status
 Description: WooCommerce Custom Order Status plugin allows you to create and manage new order statuses for WooCommerce and also display order status reports.
-Version: 2.2.7
+Version: 2.2.8
 Author: Anzia
 Author URI: https://naziinfotech.com/
 Plugin URI: https://wordpress.org/plugins/ni-woocommerce-custom-order-status/

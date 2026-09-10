@@ -53,21 +53,37 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 			
 		}
 		function get_post_status_id_by_name($post_status){
-				global $wpdb;	
-				
-				$query = "SELECT posts.ID
-						FROM {$wpdb->prefix}posts as posts		
-					
-					
-						
-						WHERE 1=1
-								AND posts.post_type ='ni-order-status' 
+				global $wpdb;
+
+				/*
+				 * The custom order-status definitions live in the "ni-order-status" custom post type,
+				 * which stays in wp_posts under both HPOS and legacy order storage, so this raw SQL
+				 * remains storage-agnostic. It is parameterised through $wpdb->prepare() because
+				 * $post_status originates from the WooCommerce status slug passed to the
+				 * woocommerce_order_status_changed hook.
+				 *
+				 * The status key registered with WooCommerce is derived from the "_ni_order_status_slug"
+				 * meta value, which is not guaranteed to equal the post's permalink slug (post_name).
+				 * Match on the meta value first, falling back to post_name so existing installs where
+				 * the two happen to be identical keep working.
+				 */
+				$query = $wpdb->prepare(
+					"SELECT posts.ID
+						FROM {$wpdb->prefix}posts as posts
+						LEFT JOIN {$wpdb->prefix}postmeta as slug
+							ON slug.post_id = posts.ID
+							AND slug.meta_key = '_ni_order_status_slug'
+						WHERE posts.post_type ='ni-order-status'
 								AND posts.post_status ='publish'
-								AND posts.post_name ='{$post_status}'
-								
-								
-						";
-					$row = $wpdb->get_row($query);	
+								AND ( slug.meta_value = %s OR posts.post_name = %s )
+						ORDER BY ( slug.meta_value = %s ) DESC
+						LIMIT 1
+						",
+					$post_status,
+					$post_status,
+					$post_status
+				);
+					$row = $wpdb->get_row($query);
 					
 				//echo error_log(json_encode(print_r($results,true)));
 				return $row ;

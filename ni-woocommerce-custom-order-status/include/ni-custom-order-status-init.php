@@ -79,6 +79,11 @@ if( !class_exists( 'ni_custom_order_status_init' ) ) {
 			
 		}
 		function niwoocos_ajax(){
+			// The order-status report exposes aggregated sales/order data and is an
+			// admin-only feature, so restrict the AJAX endpoint to capable users.
+			if ( ! current_user_can( 'manage_options' ) ) {
+				wp_die( -1, 403 );
+			}
 			$sub_action = sanitize_text_field(isset($_REQUEST['sub_action'])?$_REQUEST['sub_action']:'');
 			if ($sub_action  =='order_status_report'){
 				
@@ -101,8 +106,14 @@ if( !class_exists( 'ni_custom_order_status_init' ) ) {
 		}
 		function admin_head(){
 			global $typenow;
-			
-			if($typenow == 'ni-order-status' || $typenow == 'shop_order' ) {
+
+			// Under HPOS the WooCommerce order list runs on the "woocommerce_page_wc-orders"
+			// screen where $typenow is empty, so also detect it via the current screen id.
+			$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+			$is_order_screen = ( $typenow == 'shop_order' )
+				|| ( $screen && in_array( $screen->id, array( 'edit-shop_order', 'woocommerce_page_wc-orders' ), true ) );
+
+			if($typenow == 'ni-order-status' || $is_order_screen ) {
 				
 				 /*Hide Permalink*/				 
 				$output = "";

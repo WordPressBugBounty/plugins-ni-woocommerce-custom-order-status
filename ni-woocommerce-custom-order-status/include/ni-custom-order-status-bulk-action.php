@@ -3,11 +3,20 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
   if( !class_exists( 'ni_custom_order_status_bulk_action' ) ) {
 	class ni_custom_order_status_bulk_action {
 		public function __construct(){
-			
-			
-			add_action( 'bulk_actions-edit-shop_order',  array(&$this,'niwoo_bulk_action_order_status' ));	
-			add_filter( 'handle_bulk_actions-edit-shop_order', array(&$this,'niwoo_bulk_action_edit_order_status' ), 10, 3 );
-			add_action( 'admin_notices', array(&$this,'niwoo_bulk_action_admin_notices' ));	
+
+			/*
+			 * The WooCommerce order list screen id differs between storage modes:
+			 *  - legacy (post based) : edit-shop_order
+			 *  - HPOS  (custom table): woocommerce_page_wc-orders
+			 * Register the bulk-action hooks for both so the custom statuses appear and are
+			 * handled regardless of which order storage WooCommerce is using.
+			 */
+			$screen_suffixes = array( 'edit-shop_order', 'woocommerce_page_wc-orders' );
+			foreach ( $screen_suffixes as $suffix ) {
+				add_filter( "bulk_actions-{$suffix}", array( &$this, 'niwoo_bulk_action_order_status' ) );
+				add_filter( "handle_bulk_actions-{$suffix}", array( &$this, 'niwoo_bulk_action_edit_order_status' ), 10, 3 );
+			}
+			add_action( 'admin_notices', array(&$this,'niwoo_bulk_action_admin_notices' ));
 		}
 		function niwoo_bulk_action_order_status( $bulk_actions ){
 			 $order_status = $this->get_custom_order_status();			 
@@ -18,21 +27,28 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 		}
 		function niwoo_bulk_action_edit_order_status( $redirect_to = '', $action = '', $post_ids = ''){
 			
-			// if an array with order IDs is not presented, exit the function
-			if( !isset( $_REQUEST['post'] ) && !is_array( $_REQUEST['post'] ) )
-				return;
-				
+			// WooCommerce passes the selected order IDs as $post_ids for both legacy
+			// (edit-shop_order) and HPOS (woocommerce_page_wc-orders) list screens.
+			// The legacy $_REQUEST['post'] check is not reliable under HPOS (where the
+			// request key is "id"), so guard on the handler argument instead.
+			if ( empty( $post_ids ) || ! is_array( $post_ids ) ) {
+				return $redirect_to;
+			}
+
 			$order_status = $this->get_custom_order_status();
 			if (array_key_exists($action, $order_status)){
-				
+
 				$processed_ids = array();
 				foreach( $post_ids as $order_id ) {
 
-					$order = new WC_Order( $order_id );
-										
+					$order = wc_get_order( $order_id );
+					if ( ! $order ) {
+						continue;
+					}
+
 					$order_note = '';
-					$order->update_status( $action, $order_note, true ); // 
-					
+					$order->update_status( $action, $order_note, true ); //
+
 					$processed_ids[] = $order_id;
 				}
 				return $redirect_to = add_query_arg( array(
@@ -60,10 +76,10 @@ if ( ! defined( 'ABSPATH' ) ) { exit;}
 				printf(
     '<div id="message" class="updated notice is-dismissable"><p>' . 
     /* translators: %1$s is the order count, %2$s is the new order status */
-    __('%1$s Order status changed to %2$s.', 'niwoocos') . 
-    '</p></div>', 
+    __('%1$s Order status changed to %2$s.', 'niwoocos') .
+    '</p></div>',
     $count,
-    $current_order_status
+    esc_html( $current_order_status )
 );
 				
 		}
